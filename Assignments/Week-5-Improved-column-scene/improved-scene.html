@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html>
+  <!-- STEP 1: Prepare the canvas -->
+  <head>
+    <style>
+      #my_Canvas {
+        border: 5px dotted red;
+      }
+    </style>
+
+    <script type="text/javascript" src="gl-matrix.js"></script>
+    <script type="text/javascript" src="objects.js"></script>
+  </head>
+
+  <body>
+    <div>
+      <h1>Entregable semana 5 - Isac</h1>
+      <h2>Uso</h2>
+      <p>
+        Avanzar: w, Retroceder: s, Izquierda: a, Derecha: d, Acender: Espacio,
+        Descender: z o r-ctrl
+      </p>
+      <p>Movimiento del ángulo de visión: flechas</p>
+      <p>t: Cambiar la escala de la escena</p>
+      <p>g: Cambiar a escena alternativa</p>
+      <p>f: Cambiar la luz de fija a no fija y viceversa</p>
+      <p>Aumentar filas y columnas: y; Decrementar: h</p>
+      <p>
+        Número de filas y columnas: <span id="numberOfRowsAndColumns"></span>
+      </p>
+    </div>
+
+    <canvas width="600" height="600" id="my_Canvas"></canvas>
+
+    <!-- vertex Shader -->
+    <script id="vertex-shader" type="x-shader/x-vertex">
+      #version 300 es
+      precision mediump float;
+
+      in vec3 aCoordinates;
+
+      uniform mat4 uModelMatrix;
+      uniform mat4 uViewMatrix;
+
+      // Varying
+      out vec4 vVertexColor;
+      in vec3 aVertexNormals;
+      uniform vec3 uDiffuseMaterial;
+      uniform vec3 uLightPosition;
+      uniform bool uFixedLight;
+
+      void main(void) {
+        vec4 vertex = uModelMatrix * vec4(aCoordinates, 1.0);
+        gl_Position = uViewMatrix * vertex;
+
+        gl_PointSize = 10.0;
+
+        // calculamos vectores
+        vec3 lightPosition = uLightPosition;
+        // la multiplicación con uModelMatrix depende de si luz fija o anclada
+        vec4 light = uModelMatrix * vec4(lightPosition,1);
+        //vec4 light = vec4(lightPosition,1);
+        if (!uFixedLight) {
+          light = vec4(lightPosition,1);
+        }
+        vec3 L = normalize(light.xyz - vertex.xyz);
+        vec3 N = normalize(vec3(uModelMatrix * vec4(aVertexNormals, 0.0)));
+
+        // componente difusa
+        vec3 diffuseMaterial = uDiffuseMaterial;
+        float diffuse = max(dot(N, L), 0.0);
+        vec4 Idif = vec4(diffuse*diffuseMaterial,1);
+
+        // componente especular
+        vec3 E = normalize(-vertex.xyz);
+        vec3 R = reflect(-L, N);
+        float shininess = 10.0;
+
+        vec3 specularMaterial = vec3(1,1,1);
+        float specular = pow(max(dot(R, E), 0.0), shininess);
+        vec4 Ispec = vec4(specular * specularMaterial, 1);
+
+        // calculamos color final
+        vVertexColor = Idif + Ispec;
+        vVertexColor = min(vVertexColor, vec4(1,1,1,1));
+      }
+    </script>
+
+    <!-- fragment Shader -->
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        #version 300 es
+        precision mediump float;
+
+        uniform vec4 uColor;
+
+        out vec4 fragColor;
+        in vec4 vVertexColor;
+
+        void main(void) {
+          fragColor = vVertexColor;
+      }
+    </script>
+
+    <script>
+      // Matrix initialization block
+      {
+        var modelMatrix;
+        var viewMatrix;
+        var matrixStack = [];
+
+        function glPushMatrix() {
+          const matrix = mat4.create();
+          mat4.copy(matrix, modelMatrix);
+          matrixStack.push(matrix);
+        }
+
+        function glPopMatrix() {
+          modelMatrix = matrixStack.pop();
+        }
+      }
+
+      // Variable declaration block
+      {
+        var canvas;
+        var colorLoc;
+        var modelMatrixLoc;
+        var viewMatrixLoc;
+        var vertexBuffer;
+        var indexBuffer;
+        var zoomFactor = 1;
+
+        // Additional variables
+        var numberOfRowsAndColumns = 12;
+        document.getElementById("numberOfRowsAndColumns").innerHTML =
+          numberOfRowsAndColumns;
+        var reducedScale = false;
+
+        // Lighting related variables
+        var normalsLoc;
+        var normalBuffer;
+        var diffuseMaterialLoc;
+        var lightPositionLoc;
+        var fixedLightLoc;
+        var fixedLight = true;
+
+        // Alt scene
+        var alternativeScene = false;
+      }
+
+      // Player block
+      {
+        var player = {
+          x: 0,
+          y: 1,
+          z: numberOfRowsAndColumns + 5,
+          horizontalAngle: -Math.PI / 2,
+          verticalAngle: -Math.PI / 2,
+          moveX: 0,
+          moveY: 0,
+          moveZ: 0,
+          updateHorizontalAngle: 0,
+          updateVerticalAngle: 0,
+        };
+      }
+
+      function move() {
+        player.x += player.moveX;
+        player.y += player.moveY;
+        player.z += player.moveZ;
+        player.horizontalAngle += player.updateHorizontalAngle;
+        player.verticalAngle += player.updateVerticalAngle;
+      }
+
+      function perspective() {
+        move();
+        viewMatrix = mat4.create();
+        mat4.perspective(viewMatrix, Math.PI / 2, 1, 0.3, 30);
+        gl.uniformMatrix4fv(viewMatrixLoc, false, viewMatrix);
+        eye = [player.x, player.y, player.z];
+        v = [
+          player.x + Math.cos(player.horizontalAngle),
+          player.y + Math.cos(player.verticalAngle),
+          player.z + Math.sin(player.horizontalAngle),
+        ];
+        mat4.lookAt(modelMatrix, eye, v, [0, 1, 0]);
+      }
+
+      function toggleScale() {
+        if (reducedScale) {
+          player.x = 0;
+          player.y = 1;
+          player.z = numberOfRowsAndColumns + 5;
+          player.horizontalAngle = -Math.PI / 2;
+          player.verticalAngle = -Math.PI / 2;
+        } else {
+          player.x = 0;
+          player.y = 1;
+          player.z = 5;
+          player.horizontalAngle = -Math.PI / 2;
+          player.verticalAngle = -Math.PI / 2;
+        }
+        reducedScale = !reducedScale;
+      }
+
+      function toggleScene() {
+        if (alternativeScene) {
+          createObjects(numberOfRowsAndColumns);
+        } else {
+          createAltObjects(numberOfRowsAndColumns);
+        }
+        alternativeScene = !alternativeScene;
+      }
+
+      function incrementRowsAndColumns() {
+        numberOfRowsAndColumns++;
+        if (alternativeScene) {
+          createAltObjects(numberOfRowsAndColumns);
+        } else {
+          createObjects(numberOfRowsAndColumns);
+        }
+        document.getElementById("numberOfRowsAndColumns").innerHTML =
+          numberOfRowsAndColumns;
+        gl.uniform3fv(lightPositionLoc, [
+          numberOfRowsAndColumns,
+          numberOfRowsAndColumns,
+          numberOfRowsAndColumns,
+        ]);
+      }
+
+      function decrementRowsAndColumns() {
+        numberOfRowsAndColumns--;
+        if (alternativeScene) {
+          createAltObjects(numberOfRowsAndColumns);
+        } else {
+          createObjects(numberOfRowsAndColumns);
+        }
+        document.getElementById("numberOfRowsAndColumns").innerHTML =
+          numberOfRowsAndColumns;
+        gl.uniform3fv(lightPositionLoc, [
+          numberOfRowsAndColumns,
+          numberOfRowsAndColumns,
+          numberOfRowsAndColumns,
+        ]);
+      }
+
+      // Movement and events
+      function onKeyDown(key) {
+        switch (key.keyCode) {
+          case 87: //w
+            player.moveX = 0.1 * Math.cos(player.horizontalAngle);
+            player.moveZ = 0.1 * Math.sin(player.horizontalAngle);
+            break;
+          case 83: //s
+            player.moveX = -0.1 * Math.cos(player.horizontalAngle);
+            player.moveZ = -0.1 * Math.sin(player.horizontalAngle);
+            break;
+          case 65: //a
+            player.moveX =
+              0.1 * Math.cos(Math.PI - (player.horizontalAngle + Math.PI / 2));
+            player.moveZ =
+              -0.1 * Math.sin(Math.PI - (player.horizontalAngle + Math.PI / 2));
+            break;
+          case 68: //d
+            player.moveX =
+              -0.1 * Math.cos(Math.PI - (player.horizontalAngle + Math.PI / 2));
+            player.moveZ =
+              0.1 * Math.sin(Math.PI - (player.horizontalAngle + Math.PI / 2));
+            break;
+          case 32: //space
+            player.moveY = 0.1;
+            break;
+          case 90: //z
+          case 17: //r-ctrl
+            player.moveY = -0.1;
+            break;
+          case 38: //Up Arrow
+            player.updateVerticalAngle = 0.01;
+            break;
+          case 40: //Down Arrow
+            player.updateVerticalAngle = -0.01;
+            break;
+          case 37: //Left Arrow
+            player.updateHorizontalAngle = -0.01;
+            break;
+          case 39: //Right Arrow
+            player.updateHorizontalAngle = 0.01;
+            break;
+          case 84: //t
+            toggleScale();
+            break;
+          case 71: //g
+            toggleScene();
+            break;
+          case 89: //y
+            incrementRowsAndColumns();
+            break;
+          case 72: //h
+            decrementRowsAndColumns();
+            break;
+          case 70: //f
+            fixedLight = !fixedLight;
+            break;
+          default:
+            console.log(key.keyCode);
+        }
+      }
+
+      function onKeyUp(key) {
+        player.moveX = 0;
+        player.moveY = 0;
+        player.moveZ = 0;
+        player.updateHorizontalAngle = 0;
+        player.updateVerticalAngle = 0;
+        //console.log("Player.x: ", player.x, "Player.z: ", player.z)
+      }
+
+      // Objects block
+      {
+        var prismBuffer = [];
+        var pyramidBuffer = [];
+
+        function getRandom(min, max) {
+          return Math.random() * (max - min) + min;
+        }
+
+        function createObjects(n) {
+          prismBuffer = [];
+          pyramidBuffer = [];
+          for (let z = -n / 2; z < n / 2; z++) {
+            for (let x = -n / 2; x < n / 2; x++) {
+              color = [Math.random(), Math.random(), Math.random(), 1];
+              side = 1;
+              // The closer to the origin, the biggest the number
+              distanceFromCentre =
+                n + 1 - (Math.abs(x + side / 2) + Math.abs(z + side / 2));
+              height = getRandom(
+                distanceFromCentre - 0.5,
+                distanceFromCentre + 0.5
+              );
+              prismBuffer.push(new SquarePrism(x, 0, z, 1, height, color));
+              pyramidBuffer.push(
+                new SquarePyramid(x, height / 2, z, 1, 2, color)
+              );
+            }
+          }
+        }
+
+        function createAltObjects(n) {
+          prismBuffer = [];
+          pyramidBuffer = [];
+          for (let z = -n / 2; z < n / 2; z++) {
+            for (let x = -n / 2; x < n / 2; x++) {
+              color = [Math.random(), Math.random(), Math.random(), 1];
+              side = 1;
+              // The furthest to the origin, the biggest the number
+              height = getRandom(
+                Math.abs(x) + Math.abs(z) - 0.5,
+                Math.abs(x) + Math.abs(z) + 0.5
+              );
+              prismBuffer.push(new SquarePrism(x, 0, z, 1, height, color));
+              pyramidBuffer.push(
+                new SquarePyramid(x, height / 2, z, 1, 2, color)
+              );
+            }
+          }
+        }
+      }
+      
+      function lightFixation() {
+        if (fixedLight) {
+          gl.uniform1i(fixedLightLoc, 1);
+        } else {
+          gl.uniform1i(fixedLightLoc, 0);
+        }
+      }
+
+      function renderPrisms() {
+        glPushMatrix();
+        {
+          if (reducedScale)
+            mat4.scale(modelMatrix, modelMatrix, [
+              1 / (numberOfRowsAndColumns / 2),
+              1 / (numberOfRowsAndColumns / 2),
+              1 / (numberOfRowsAndColumns / 2),
+            ]);
+          for (let i = 0; i < prismBuffer.length; i++) {
+            glPushMatrix();
+            const prism = prismBuffer[i];
+            mat4.translate(modelMatrix, modelMatrix, [
+              prism.x,
+              prism.y,
+              prism.z,
+            ]);
+            gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+
+            // Vertices
+            arrayV = prism.vertexBuffer.slice();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(
+              gl.ARRAY_BUFFER,
+              new Float32Array(arrayV),
+              gl.STATIC_DRAW
+            );
+
+            // Normales
+            normals = prism.vertexNormals.slice();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.bufferData(
+              gl.ARRAY_BUFFER,
+              new Float32Array(normals),
+              gl.STATIC_DRAW
+            );
+
+            //Pinto las caras
+            arrayF = prism.indexBuffer.slice();
+            gl.bufferData(
+              gl.ELEMENT_ARRAY_BUFFER,
+              new Uint16Array(arrayF),
+              gl.STATIC_DRAW
+            );
+            gl.uniform3fv(diffuseMaterialLoc, [
+              prism.color[0],
+              prism.color[1],
+              prism.color[2],
+            ]);
+            gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
+            delete arrayV;
+            delete normals;
+            delete arrayF;
+            glPopMatrix();
+          }
+        }
+        glPopMatrix();
+      }
+
+      function renderPyramids() {
+        glPushMatrix();
+        {
+          if (reducedScale)
+            mat4.scale(modelMatrix, modelMatrix, [
+              1 / (numberOfRowsAndColumns / 2),
+              1 / (numberOfRowsAndColumns / 2),
+              1 / (numberOfRowsAndColumns / 2),
+            ]);
+          for (let i = 0; i < pyramidBuffer.length; i++) {
+            glPushMatrix();
+            const pyramid = pyramidBuffer[i];
+            mat4.translate(modelMatrix, modelMatrix, [
+              pyramid.x,
+              pyramid.y,
+              pyramid.z,
+            ]);
+            gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+
+            // Vertices
+            arrayV = pyramid.vertexBuffer.slice();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(
+              gl.ARRAY_BUFFER,
+              new Float32Array(arrayV),
+              gl.STATIC_DRAW
+            );
+
+            // Normales
+            normals = pyramid.vertexNormals.slice();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.bufferData(
+              gl.ARRAY_BUFFER,
+              new Float32Array(normals),
+              gl.STATIC_DRAW
+            );
+
+            //Pinto las caras
+            arrayF = pyramid.indexBuffer.slice();
+            gl.bufferData(
+              gl.ELEMENT_ARRAY_BUFFER,
+              new Uint16Array(arrayF),
+              gl.STATIC_DRAW
+            );
+            gl.uniform3fv(diffuseMaterialLoc, [
+              pyramid.color[0],
+              pyramid.color[1],
+              pyramid.color[2],
+            ]);
+            gl.drawElements(gl.TRIANGLES, 18, gl.UNSIGNED_SHORT, 0);
+
+            delete arrayV;
+            delete normals;
+            delete arrayF;
+            glPopMatrix();
+          }
+        }
+        glPopMatrix();
+      }
+
+      /************************************************************************
+       ********************************* Init **********************************
+       ************************************************************************/
+      function init() {
+        // ============ STEP 1: Creating a canvas ==============================
+        {
+          canvas = document.getElementById("my_Canvas");
+          gl = canvas.getContext("webgl2");
+        }
+
+        //============= STEP 2: Defining and storing the geometry ==============
+        {
+          var vertices = [-0.8, 0.5, 0.0, 0.5, -0.25, 0.25, 0.0, 0.0];
+
+          // Create an empty buffer object to store the vertex buffer
+          vertexBuffer = gl.createBuffer();
+          indexBuffer = gl.createBuffer();
+          normalBuffer = gl.createBuffer();
+
+          gl.enable(gl.DEPTH_TEST);
+        }
+
+        //============= STEP 3: Create and compile shaders =====================
+        {
+          // Create a vertex shader object
+          var vertShader = gl.createShader(gl.VERTEX_SHADER);
+
+          // Attach vertex shader source code
+          var script = document.getElementById("vertex-shader");
+          var shaderString = script.text.trim();
+          gl.shaderSource(vertShader, shaderString);
+
+          // Compile the vertex shader
+          gl.compileShader(vertShader);
+          if (!gl.getShaderParameter(vertShader, gl.COMPILE_STATUS)) {
+            console.error("vertShader: " + gl.getShaderInfoLog(vertShader));
+            return null;
+          }
+
+          // Create fragment shader object
+          var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+
+          // Attach fragment shader source code
+          script = document.getElementById("fragment-shader");
+          shaderString = script.text.trim();
+          gl.shaderSource(fragShader, shaderString);
+
+          // Compile the fragmentt shader
+          gl.compileShader(fragShader);
+          if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)) {
+            console.error("fragShader: " + gl.getShaderInfoLog(fragShader));
+            return null;
+          }
+
+          // Create a shader program object to store
+          // the combined shader program
+          var shaderProgram = gl.createProgram();
+
+          // Attach a vertex shader
+          gl.attachShader(shaderProgram, vertShader);
+
+          // Attach a fragment shader
+          gl.attachShader(shaderProgram, fragShader);
+
+          // Link both programs
+          gl.linkProgram(shaderProgram);
+
+          // Use the combined shader program object
+          gl.useProgram(shaderProgram);
+        }
+
+        //============= STEP 4: Associating shaders to buffer objects ==========
+        {
+          // Bind vertex buffer object
+          gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+
+          // Get the attribute location
+          var coordLocation = gl.getAttribLocation(
+            shaderProgram,
+            "aCoordinates"
+          );
+
+          // obtener la location del color
+          colorLoc = gl.getUniformLocation(shaderProgram, "uColor");
+
+          // look up uniform modelMatrix location
+          modelMatrixLoc = gl.getUniformLocation(shaderProgram, "uModelMatrix");
+          viewMatrixLoc = gl.getUniformLocation(shaderProgram, "uViewMatrix");
+
+          // Location de normals
+          normalsLoc = gl.getAttribLocation(shaderProgram, "aVertexNormals");
+
+          // Additional locations
+          diffuseMaterialLoc = gl.getUniformLocation(
+            shaderProgram,
+            "uDiffuseMaterial"
+          );
+
+          lightPositionLoc = gl.getUniformLocation(
+            shaderProgram,
+            "uLightPosition"
+          );
+          
+          // Luz fija
+          fixedLightLoc = gl.getUniformLocation(
+            shaderProgram,
+            "uFixedLight"
+          );
+          
+          gl.uniform1i(fixedLightLoc, 0);
+
+          // Point an attribute to the currently bound VBO
+          gl.vertexAttribPointer(coordLocation, 3, gl.FLOAT, false, 0, 0);
+
+          // Enable the attribute
+          gl.enableVertexAttribArray(coordLocation);
+
+          // vector de normales
+          gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+          gl.vertexAttribPointer(normalsLoc, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(normalsLoc);
+
+          // Unbind the buffer
+          gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        }
+
+        //numberOfRowsAndColumns = 8
+        createObjects(numberOfRowsAndColumns);
+        gl.uniform3fv(lightPositionLoc, [
+          numberOfRowsAndColumns,
+          numberOfRowsAndColumns,
+          numberOfRowsAndColumns,
+        ]);
+
+        time = 0;
+        render(time);
+        document.onkeydown = onKeyDown;
+        document.onkeyup = onKeyUp;
+      }
+
+      function render(time) {
+        //========= STEP 5: Drawing the primitive ===============
+
+        // Clear the canvas
+        gl.clearColor(0.6, 0.4, 0.5, 1.0);
+
+        // Clear the color buffer bit
+        gl.clear(gl.COLOR_BUFFER_BIT || gl.DEPTH_BUFFER_BIT);
+
+        // Set the view port
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        // activamos los buffers
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+
+        // Set the model Matrix.
+        modelMatrix = mat4.create();
+        mat4.identity(modelMatrix);
+
+        // Perspectiva
+        perspective();
+
+        // Luz fija o no 
+        lightFixation()
+        // Pintamos la escena
+        renderPrisms();
+        renderPyramids();
+
+        // bucle de animación
+        window.requestAnimationFrame(render);
+      }
+
+      window.onload = init;
+    </script>
+  </body>
+</html>

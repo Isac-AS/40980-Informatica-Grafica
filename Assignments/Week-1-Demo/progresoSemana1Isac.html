@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+  <!-- STEP 1: Prepare the canvas -->
+  <head>
+    <style>
+      #my_Canvas {
+        border: 5px dotted blue;
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas width="500" height="500" id="my_Canvas"></canvas>
+
+    <!-- vertex Shader -->
+    <script id="vertex-shader" type="x-shader/x-vertex">
+      #version 300 es
+      precision mediump float;
+
+      in vec2 aCoordinates;
+
+      void main(void) {
+        gl_Position = vec4(aCoordinates, 0, 1);
+        gl_PointSize = 10.0;
+      }
+    </script>
+
+    <!-- fragment Shader -->
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        #version 300 es
+        precision mediump float;
+
+        uniform vec4 uColor;
+        out vec4 fragColor;
+
+        void main(void) {
+          fragColor = uColor;
+      }
+    </script>
+
+    <script>
+      
+      var canvas;
+      var colorLocation;
+      var vertex_buffer;
+      /*
+     //contexto 2D tradicional
+     var canvas = document.getElementById('my_Canvas');
+     var context = canvas.getContext('2d');
+     context.font = '20pt Calibri';
+     context.fillStyle = 'red'
+     context.fillText('Hola',70,70);*/
+      
+      function setRectangle(x,y,w,h) {
+        
+        v = new Float32Array([x,y+h,
+                              x,y,
+                              x+w,y+h,
+                              x,y,
+                              x+w,y+h,
+                              x+w,y]
+                            );
+        // Pass the vertex data to the buffer
+        gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+      }
+
+      function init() {
+        // ============ STEP 1: Creating a canvas=================
+        canvas = document.getElementById("my_Canvas");
+        gl = canvas.getContext("webgl2");
+
+        //======= STEP 2: Defining and storing the geometry=======
+
+        var vertices = [
+          -0.5, 0.5,
+          0.0, 0.5,
+          -0.25, 0.25,
+          0.0, 0.0,
+          0.9, .9,
+          .9, -.9,
+        ];
+
+        // Create an empty buffer object to store the vertex buffer
+        vertex_buffer = gl.createBuffer();
+
+        // Bind appropriate array buffer to it
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+        
+        
+
+        // Pass the vertex data to the buffer
+        /*gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW
+        );*/
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        //========== STEP 3: Create and compile shaders ==========
+
+        // Create a vertex shader object
+        var vertShader = gl.createShader(gl.VERTEX_SHADER);
+
+        // Attach vertex shader source code
+        var script = document.getElementById("vertex-shader");
+        var shaderString = script.text.trim();
+        gl.shaderSource(vertShader, shaderString);
+
+        // Compile the vertex shader
+        gl.compileShader(vertShader);
+
+        // Create fragment shader object
+        var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+
+        // Attach fragment shader source code
+        script = document.getElementById("fragment-shader");
+        shaderString = script.text.trim();
+        gl.shaderSource(fragShader, shaderString);
+
+        // Compile the fragmentt shader
+        gl.compileShader(fragShader);
+
+        // Create a shader program object to store
+        // the combined shader program
+        var shaderProgram = gl.createProgram();
+
+        // Attach a vertex shader
+        gl.attachShader(shaderProgram, vertShader);
+
+        // Attach a fragment shader
+        gl.attachShader(shaderProgram, fragShader);
+
+        // Link both programs
+        gl.linkProgram(shaderProgram);
+
+        // Use the combined shader program object
+        gl.useProgram(shaderProgram);
+
+        //======== STEP 4: Associating shaders to buffer objects ========
+
+        // Bind vertex buffer object
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Get the attribute location
+        var coordLocation = gl.getAttribLocation(shaderProgram, "aCoordinates");
+
+        // Obtain color location
+        colorLocation = gl.getUniformLocation(shaderProgram, "uColor");
+
+        // Point an attribute to the currently bound VBO
+        gl.vertexAttribPointer(coordLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Enable the attribute
+        gl.enableVertexAttribArray(coordLocation);
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        
+        time = 0;
+        render(time);
+        
+      }
+      
+      function render(time) {
+        console.log('tiempo = ', time)
+        //========= STEP 5: Drawing the primitive ===============
+        // Clear the canvas
+        gl.clearColor(0.5, 0.5, 0.5, 1.0);
+
+        // Clear the color buffer bit
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Set the view port
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        gl.uniform4f(colorLocation, Math.random(), Math.random(), Math.random(), 1);
+        
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+        setRectangle(-0.1,-0.1,0.2,0.2);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        // Draw the triangle
+        x = Math.random() * 2 - 1;
+        y = Math.random() * 2 - 1;
+        setRectangle(x, y,0.5,0.5);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        
+        window.requestAnimationFrame(render);
+      }
+      
+      window.onload = init;
+      
+    </script>
+  </body>
+</html>

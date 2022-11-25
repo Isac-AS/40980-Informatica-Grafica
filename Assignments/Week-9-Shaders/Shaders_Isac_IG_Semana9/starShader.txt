@@ -1,0 +1,35 @@
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform float u_time;
+
+float csch(float x){
+    return (2.*pow(2.71,x))/(pow(2.71, 2.*x)-1.);
+}
+
+
+bool star(vec2 initial_st, float variance) {
+    vec2 st = initial_st-vec2(0.5);
+    float motion_factor = 15.*(variance+1.);
+    float f1 = 0.5*csch(motion_factor*st.x);
+    float f2 = -0.5*csch(motion_factor*st.x);
+    if (st.x > 0.) {
+        return st.y < f1 && st.y > f2 && st.y < 0.45 && st.y > -0.45;
+    } else {
+        return st.y > f1 && st.y < f2 && st.y < 0.45 && st.y > -0.45;
+    }
+}
+
+void main() {
+  	vec2 st = gl_FragCoord.xy/u_resolution;
+  	vec3 color = vec3(0.0);
+    
+	float variance = abs(sin(u_time*2.));
+    if (star(st,variance)) {
+        color = vec3(1.);
+    }
+
+  	gl_FragColor = vec4(color,1.0);
+}

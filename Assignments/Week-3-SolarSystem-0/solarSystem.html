@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html>
+  <!-- STEP 1: Prepare the canvas -->
+  <head>
+    <style>
+      #my_Canvas {
+        border: 5px dotted red;
+      }
+    </style>
+
+    <script type="text/javascript" src="dat.gui.js"></script>
+    <script type="text/javascript" src="gl-matrix.js"></script>
+  </head>
+
+  <body>
+    <canvas width="600" height="600" id="my_Canvas"></canvas>
+
+    <!-- vertex Shader -->
+    <script id="vertex-shader" type="x-shader/x-vertex">
+      #version 300 es
+      precision mediump float;
+
+      in vec2 aCoordinates;
+
+      uniform mat4 uModelMatrix;
+
+      void main(void) {
+        gl_Position = uModelMatrix * vec4(aCoordinates, 0, 1);
+        gl_PointSize = 10.0;
+      }
+    </script>
+
+    <!-- fragment Shader -->
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        #version 300 es
+        precision mediump float;
+
+        uniform vec4 uColor;
+
+        out vec4 fragColor;
+
+        void main(void) {
+          fragColor = uColor;
+      }
+    </script>
+
+    <script>
+      var controls = new (function () {
+        this.translateX = 0.0;
+        this.translateY = 0.0;
+        this.rotateX = 0.0;
+        this.rotateY = 0.0;
+        this.rotateZ = 0.0;
+        this.scale = 1.0;
+      })();
+
+      var gui = new dat.GUI();
+      gui.add(controls, "translateX", -1, 1, 0.01);
+      gui.add(controls, "translateY", -1, 1, 0.01);
+      gui.add(controls, "rotateX", -180, 180, 1);
+      gui.add(controls, "rotateY", -180, 180, 1);
+      gui.add(controls, "rotateZ", -180, 180, 1);
+      gui.add(controls, "scale", 0.1, 10, 0.01);
+
+      var modelMatrix = mat4.create();
+      var matrixStack = [];
+
+      function glPushMatrix() {
+        const matrix = mat4.create();
+        mat4.copy(matrix, modelMatrix);
+        matrixStack.push(matrix);
+      }
+
+      function glPopMatrix() {
+        modelMatrix = matrixStack.pop();
+      }
+
+      var canvas;
+      var colorLoc;
+      var modelMatrixLoc;
+      var vertexBuffer;
+      
+      var earth = {
+        x: 0.5,
+        y: 0,
+        w: 0.07,
+        h: 0.07,
+        color: [0, 0, 1, 1],
+        a: 0.05,
+        rotateX: 0.2,
+        rotateY: 0.2,
+        incrementInAngle: 0.01,
+        rotation: 3
+      };
+
+      var sun = {
+        x: 0,
+        y: 0,
+        w: 0.075,
+        h: 0.075,
+        color: [1, 1, 0, 1],
+      };
+
+      var mercury = {
+        x: 0.15,
+        y: 0,
+        w: 0.04,
+        h: 0.04,
+        color: [0.5, 0.5, 0.5, 1],
+        a: 0,
+        rotateX: -0.5,
+        rotateY: 0.5,
+        incrementInAngle: 0.05,
+        rotation: earth.rotation / 59
+      };
+
+      var venus = {
+        x: 0.25,
+        y: 0,
+        w: 0.07,
+        h: 0.07,
+        color: [1, 1, 0.5, 1],
+        a: 0,
+        rotateX: 0.5,
+        rotateY: 0.5,
+        incrementInAngle: 0.01667,
+        rotation: earth.rotation  / 243
+      };
+
+      var moon = {
+        x: 1.5,
+        y: 0,
+        w: 0.5,
+        h: 0.5,
+        color: [0.5, 0.5, 0.5, 1],
+        a: 0,
+        rotateX: 0.05,
+        rotateY: 0,
+        incrementInAngle: 0,
+      };
+
+      var mars = {
+        x: 0.75,
+        y: 0,
+        w: 0.05,
+        h: 0.05,
+        color: [1, 0, 0, 1],
+        a: 0,
+        rotateX: 0.4,
+        rotateY: 0.4,
+        incrementInAngle: 0.00526,
+        rotation: earth.rotation
+      };
+
+      var phobos = {
+        x: 1.5,
+        y: 0,
+        w: 0.5,
+        h: 0.5,
+        color: [0.5, 0.5, 0.8, 1],
+        a: 0,
+        rotateX: -0.05,
+        rotateY: 0,
+        incrementInAngle: 0.008,
+      };
+
+      var deimos = {
+        x: 2,
+        y: 0,
+        w: 0.4,
+        h: 0.4,
+        color: [0.8, 0.5, 0.5, 1],
+        a: 0,
+        rotateX: 0.05,
+        rotateY: -0.05,
+        incrementInAngle: 0.005,
+      };
+      
+      var jupiter = {
+        x: 0.9,
+        y: 0,
+        w: 0.08,
+        h: 0.08,
+        color: [0.9, 0.44, 0.223, 1],
+        a: 0,
+        rotateX: -0.3,
+        rotateY: -0.4,
+        incrementInAngle: 0.002526,
+        rotation: earth.rotation * 2
+      };
+      
+      var saturn = {
+        x: 1.2,
+        y: 0,
+        w: 0.08,
+        h: 0.08,
+        color: [0.803, 0.627, 0.337, 1],
+        a: 0,
+        rotateX: 0.2,
+        rotateY: -0.2,
+        incrementInAngle: 0.0015,
+        rotation: earth.rotation * 2
+      };
+      
+      
+
+      function drawSquare() {
+        v = new Float32Array([
+          -0.5, 0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5, 0.5, 0.5, -0.5,
+        ]);
+        gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+
+      function drawCircle() {
+        const numVerts = 720;
+        v = new Float32Array(numVerts);
+        for (let i = 0; i < numVerts; i++) {
+          u = i / numVerts;
+          if (i % 2 == 0) {
+            v[i] = Math.cos(u * Math.PI * 2);
+          } else {
+            v[i] = Math.sin(u * Math.PI * 2);
+          }
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+        gl.drawArrays(gl.LINE_LOOP, 0, 360);
+      }
+
+      function init() {
+        // ============ STEP 1: Creating a canvas=================
+        canvas = document.getElementById("my_Canvas");
+        gl = canvas.getContext("webgl2");
+
+        //======= STEP 2: Defining and storing the geometry=======
+
+        var vertices = [-0.8, 0.5, 0.0, 0.5, -0.25, 0.25, 0.0, 0.0];
+
+        // Create an empty buffer object to store the vertex buffer
+        vertex_buffer = gl.createBuffer();
+
+        // Bind appropriate array buffer to it
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        //========== STEP 3: Create and compile shaders ==========
+
+        // Create a vertex shader object
+        var vertShader = gl.createShader(gl.VERTEX_SHADER);
+
+        // Attach vertex shader source code
+        var script = document.getElementById("vertex-shader");
+        var shaderString = script.text.trim();
+        gl.shaderSource(vertShader, shaderString);
+
+        // Compile the vertex shader
+        gl.compileShader(vertShader);
+
+        // Create fragment shader object
+        var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+
+        // Attach fragment shader source code
+        script = document.getElementById("fragment-shader");
+        shaderString = script.text.trim();
+        gl.shaderSource(fragShader, shaderString);
+
+        // Compile the fragmentt shader
+        gl.compileShader(fragShader);
+
+        // Create a shader program object to store
+        // the combined shader program
+        var shaderProgram = gl.createProgram();
+
+        // Attach a vertex shader
+        gl.attachShader(shaderProgram, vertShader);
+
+        // Attach a fragment shader
+        gl.attachShader(shaderProgram, fragShader);
+
+        // Link both programs
+        gl.linkProgram(shaderProgram);
+
+        // Use the combined shader program object
+        gl.useProgram(shaderProgram);
+
+        //======== STEP 4: Associating shaders to buffer objects ========
+
+        // Bind vertex buffer object
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Get the attribute location
+        var coordLocation = gl.getAttribLocation(shaderProgram, "aCoordinates");
+
+        // obtener la location del color
+        colorLoc = gl.getUniformLocation(shaderProgram, "uColor");
+
+        modelMatrixLoc = gl.getUniformLocation(shaderProgram, "uModelMatrix");
+
+        // Point an attribute to the currently bound VBO
+        gl.vertexAttribPointer(coordLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Enable the attribute
+        gl.enableVertexAttribArray(coordLocation);
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        time = 0;
+        render(time);
+      }
+
+      function drawMoon(moon) {
+        // Draw moon
+        glPushMatrix();
+        {
+          moon.a += moon.incrementInAngle;
+          mat4.rotateX(modelMatrix, modelMatrix, moon.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, moon.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, moon.a);
+          mat4.translate(modelMatrix, modelMatrix, [moon.x, moon.y, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [moon.w, moon.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, moon.color);
+          drawSquare();
+        }
+        glPopMatrix();
+
+        // Draw moon's orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, moon.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, moon.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, moon.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [moon.x, moon.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, moon.color);
+          drawCircle();
+        }
+        glPopMatrix();
+      }
+
+      function drawPlanet(planet, moons = []) {
+        // Draw planet
+        glPushMatrix();
+        {
+          planet.a += planet.incrementInAngle;
+          mat4.rotateX(modelMatrix, modelMatrix, planet.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, planet.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, planet.a);
+          mat4.translate(modelMatrix, modelMatrix, [planet.x, planet.y, 0]);
+          mat4.rotateZ(modelMatrix, modelMatrix, planet.a * planet.rotation);
+          mat4.scale(modelMatrix, modelMatrix, [planet.w, planet.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, planet.color);
+          drawSquare();
+        }
+
+        for (let i = 0; i < moons.length; i++) {
+          drawMoon(moons[i]);
+        }
+        glPopMatrix();
+
+        // Draw planet's orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, planet.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, planet.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, planet.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [planet.x, planet.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, planet.color);
+          drawCircle();
+        }
+        glPopMatrix();
+      }
+      
+      function drawRing() {
+        numVerts = 720;
+        v = new Float32Array(numVerts);
+        angle = 0
+        for (let i = 0; i < numVerts; i++) {
+          if (i%2==0) {
+            v[i] = Math.cos(i)
+          } else {
+            v[i] = Math.sin(i)
+            angle++;
+          }
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+        gl.drawArrays(gl.LINE_LOOP, 0, 360);
+      }
+      
+      function drawSaturn() {
+        glPushMatrix();
+        {
+          saturn.a += saturn.incrementInAngle;
+          mat4.rotateX(modelMatrix, modelMatrix, saturn.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, saturn.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, saturn.a);
+          mat4.translate(modelMatrix, modelMatrix, [saturn.x, saturn.y, 0]);
+          mat4.rotateZ(modelMatrix, modelMatrix, saturn.a * saturn.rotation);
+          mat4.scale(modelMatrix, modelMatrix, [saturn.w, saturn.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, saturn.color);
+          drawSquare();
+          drawRing();
+        }
+
+        glPopMatrix();
+
+        // Draw planet's orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, saturn.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, saturn.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, saturn.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [saturn.x, saturn.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, saturn.color);
+          drawCircle();
+        }
+        glPopMatrix();
+      }
+
+      function render(time) {
+        //console.log('tiempo='+time);
+
+        //========= STEP 5: Drawing the primitive ===============
+
+        // Clear the canvas
+        gl.clearColor(0, 0, 0, 1.0);
+
+        // Clear the color buffer bit
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Set the view port
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Added modelMatrix
+        mat4.identity(modelMatrix);
+        mat4.translate(modelMatrix, modelMatrix, [
+          controls.translateX,
+          controls.translateY,
+          0,
+        ]);
+        mat4.rotateX(
+          modelMatrix,
+          modelMatrix,
+          (controls.rotateX / 180) * Math.PI
+        );
+        mat4.rotateY(
+          modelMatrix,
+          modelMatrix,
+          (controls.rotateY / 180) * Math.PI
+        );
+        mat4.rotateZ(
+          modelMatrix,
+          modelMatrix,
+          (controls.rotateZ / 180) * Math.PI
+        );
+        mat4.scale(modelMatrix, modelMatrix, [
+          controls.scale,
+          controls.scale,
+          controls.scale,
+        ]);
+        gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+
+        // Reference circle
+        //drawCircle();
+
+        // Draw the sun
+        glPushMatrix();
+        {
+          mat4.scale(modelMatrix, modelMatrix, [sun.w, sun.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, sun.color);
+          drawSquare();
+        }
+        glPopMatrix();
+        
+        drawPlanet(mercury);
+        drawPlanet(venus);
+        drawPlanet(earth, [moon]);
+        drawPlanet(mars, [phobos, deimos]);
+        drawPlanet(jupiter)
+        drawSaturn();
+
+        
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        window.requestAnimationFrame(render);
+      }
+
+      window.onload = init;
+    </script>
+  </body>
+</html>
+
+
+<script>
+
+/*
+Me pareció muchísimo boilerplate, aun así, lo dejo por aquí.
+Esto es lo que estaba en vez de las llamadas a drawPlanet();
+
+
+        // Draw Mercury
+        glPushMatrix();
+        {
+          mercury.a += 0.05;
+          mat4.rotateX(modelMatrix, modelMatrix, mercury.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, mercury.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, mercury.a);
+          mat4.translate(modelMatrix, modelMatrix, [mercury.x, mercury.y, 0]);
+          mat4.rotateZ(modelMatrix, modelMatrix, mercury.a * 0.05);
+          mat4.scale(modelMatrix, modelMatrix, [mercury.w, mercury.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, mercury.color);
+          drawSquare();
+        }
+        glPopMatrix();
+
+        // Draw Mercury orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, mercury.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, mercury.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, mercury.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [mercury.x, mercury.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, mercury.color);
+          drawCircle();
+        }
+        glPopMatrix();
+
+        // Draw Venus
+        glPushMatrix();
+        {
+          venus.a += 0.01667;
+          mat4.rotateX(modelMatrix, modelMatrix, venus.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, venus.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, venus.a);
+          mat4.translate(modelMatrix, modelMatrix, [venus.x, venus.y, 0]);
+          mat4.rotateZ(modelMatrix, modelMatrix, venus.a * 0.05);
+          mat4.scale(modelMatrix, modelMatrix, [venus.w, venus.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, venus.color);
+          drawSquare();
+        }
+        glPopMatrix();
+
+        // Draw Venus orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, venus.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, venus.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, venus.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [venus.x, venus.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, venus.color);
+          drawCircle();
+        }
+        glPopMatrix();
+
+        // Draw the earth
+        glPushMatrix();
+        {
+          earth.a += 0.01;
+          mat4.rotateX(modelMatrix, modelMatrix, earth.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, earth.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, earth.a);
+          mat4.translate(modelMatrix, modelMatrix, [earth.x, earth.y, 0]);
+          mat4.rotateZ(modelMatrix, modelMatrix, earth.a * 4);
+          mat4.scale(modelMatrix, modelMatrix, [earth.w, earth.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, earth.color);
+          drawSquare();
+        }
+
+        // Draw the moon
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, moon.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, moon.rotateY);
+          mat4.translate(modelMatrix, modelMatrix, [moon.x, moon.y, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [moon.w, moon.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, moon.color);
+          drawSquare();
+        }
+        glPopMatrix();
+
+        // Draw Moon orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, moon.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, moon.rotateY);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [moon.x, moon.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, moon.color);
+          drawCircle();
+        }
+        glPopMatrix();
+        glPopMatrix();
+
+        // Draw Earth orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, earth.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, earth.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, earth.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [earth.x, earth.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, earth.color);
+          drawCircle();
+        }
+        glPopMatrix();
+
+        // Draw mars
+        glPushMatrix();
+        {
+          mars.a += 0.00526;
+          mat4.rotateX(modelMatrix, modelMatrix, mars.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, mars.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, mars.a);
+          mat4.translate(modelMatrix, modelMatrix, [mars.x, mars.y, 0]);
+          mat4.rotateZ(modelMatrix, modelMatrix, mars.a * 2);
+          mat4.scale(modelMatrix, modelMatrix, [mars.w, mars.h, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, mars.color);
+          drawSquare();
+
+          // Draw Phobos
+          glPushMatrix();
+          {
+            phobos.a += 0.008;
+            mat4.rotateX(modelMatrix, modelMatrix, phobos.rotateX);
+            mat4.rotateY(modelMatrix, modelMatrix, phobos.rotateY);
+            mat4.rotateZ(modelMatrix, modelMatrix, phobos.a);
+            mat4.translate(modelMatrix, modelMatrix, [phobos.x, phobos.y, 0]);
+            mat4.scale(modelMatrix, modelMatrix, [phobos.w, phobos.h, 1]);
+            gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+            gl.uniform4fv(colorLoc, phobos.color);
+            drawSquare();
+          }
+          glPopMatrix();
+
+          // Draw Phobos orbit
+          glPushMatrix();
+          {
+            mat4.rotateX(modelMatrix, modelMatrix, phobos.rotateX);
+            mat4.rotateY(modelMatrix, modelMatrix, phobos.rotateY);
+            mat4.rotateZ(modelMatrix, modelMatrix, phobos.a);
+            mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+            mat4.scale(modelMatrix, modelMatrix, [phobos.x, phobos.x, 1]);
+            gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+            gl.uniform4fv(colorLoc, phobos.color);
+            drawCircle();
+          }
+          glPopMatrix();
+
+          // Draw Deimos
+          glPushMatrix();
+          {
+            deimos.a += 0.005;
+            mat4.rotateX(modelMatrix, modelMatrix, deimos.rotateX);
+            mat4.rotateY(modelMatrix, modelMatrix, deimos.rotateY);
+            mat4.rotateZ(modelMatrix, modelMatrix, deimos.a);
+            mat4.translate(modelMatrix, modelMatrix, [deimos.x, deimos.y, 0]);
+            mat4.scale(modelMatrix, modelMatrix, [deimos.w, deimos.h, 1]);
+            gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+            gl.uniform4fv(colorLoc, deimos.color);
+            drawSquare();
+          }
+          glPopMatrix();
+
+          // Draw Phobos orbit
+          glPushMatrix();
+          {
+            mat4.rotateX(modelMatrix, modelMatrix, deimos.rotateX);
+            mat4.rotateY(modelMatrix, modelMatrix, deimos.rotateY);
+            mat4.rotateZ(modelMatrix, modelMatrix, deimos.a);
+            mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+            mat4.scale(modelMatrix, modelMatrix, [deimos.x, deimos.x, 1]);
+            gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+            gl.uniform4fv(colorLoc, deimos.color);
+            drawCircle();
+          }
+          glPopMatrix();
+        }
+        glPopMatrix();
+
+        // Draw Mars orbit
+        glPushMatrix();
+        {
+          mat4.rotateX(modelMatrix, modelMatrix, mars.rotateX);
+          mat4.rotateY(modelMatrix, modelMatrix, mars.rotateY);
+          mat4.rotateZ(modelMatrix, modelMatrix, mars.a);
+          mat4.translate(modelMatrix, modelMatrix, [0, 0, 0]);
+          mat4.scale(modelMatrix, modelMatrix, [mars.x, mars.x, 1]);
+          gl.uniformMatrix4fv(modelMatrixLoc, false, modelMatrix);
+          gl.uniform4fv(colorLoc, mars.color);
+          drawCircle();
+        }
+        glPopMatrix();
+        */
+</script>

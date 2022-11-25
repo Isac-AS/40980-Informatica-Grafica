@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Ejemplo de three.js app mínimo</title>
+		<style>
+			body { margin: 0; }
+		</style>
+	</head>
+	<body>
+    <script src="https://threejs.org/build/three.js"></script> 
+    <button type="button" 
+            style="z-index: 1;
+                   position: absolute;
+                   top: 10em;
+                   left: 1em" 
+            id="showInfo">Mostrar/Ocultar Info</button>
+    <button type="button" 
+            style="z-index: 1;
+                   position: absolute;
+                   top: 15em;
+                   left: 1em;" 
+            id="displayStraightLines">Ver perfil con rectas</button>
+    <button type="button" 
+            style="z-index: 1;
+                   position: absolute;
+                   top: 20em;
+                   left: 1em;" 
+            id="displayCurves">Ver perfil con curvas</button>
+    
+    <button type="button" 
+            style="z-index: 1;
+                   position: absolute;
+                   top: 5em;
+                   left: 1em;" 
+            id="toggleObject">Cambiar objeto</button>
+    
+    <button type="button" 
+            style="z-index: 1;
+                   position: absolute;
+                   top: 50%;
+                   left: 5em;
+                   font-size: 2em" 
+            id="createSolidOfRevolution">¡Crear sólido de revolución!</button>
+    
+    <button type="button" 
+            style="z-index: 1;
+                   position: absolute;
+                   top: 2em;
+                   left: 1em;" 
+            id="goToPhaseOne">Crear otro sólido de revolución</button>
+    
+    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+    <script src="/script.js" defer></script>
+	</body>
+</html>

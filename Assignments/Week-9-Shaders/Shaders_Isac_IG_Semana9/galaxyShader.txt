@@ -1,0 +1,68 @@
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform float u_time;
+
+float scale = 15.;
+
+// Valor aleatorio en 2D
+float random (in vec2 st) {
+  return fract(sin(dot(st.xy,
+                       vec2(12.9898,78.233)))
+               * 43758.5453123);
+}
+
+
+float csch(float x){
+    return (2.*pow(2.71,x))/(pow(2.71, 2.*x)-1.);
+}
+
+
+bool star(vec2 initial_st, float variance) {
+    vec2 st = initial_st-vec2(0.5);
+    float motion_factor = 15.*(variance+1.);
+    float f1 = 0.5*csch(motion_factor*st.x);
+    float f2 = -0.5*csch(motion_factor*st.x);
+    if (st.x > 0.) {
+        return st.y < f1 && st.y > f2 && st.y < 0.45 && st.y > -0.45;
+    } else {
+        return st.y > f1 && st.y < f2 && st.y < 0.45 && st.y > -0.45;
+    }
+}
+
+bool galaxy(vec2 initial_st) {
+    vec2 st = initial_st-vec2(0.5);
+    float f1 = -0.5*csch(6.7*st.x+4.)+0.3;
+    float f2 = -0.5*csch(6.7*st.x-4.)-0.4;
+    return st.y < f1 && st.y > f2;
+}
+
+void main() {
+  	vec2 st = gl_FragCoord.xy/u_resolution;
+  	vec3 color = vec3(0.0);
+    
+    // Aleatorio generado
+    float random = random(st);
+    
+    // Determinación de si debe o no pintar
+    bool inGalaxy = galaxy(st);
+    bool drawStar;
+    if (inGalaxy) {
+        drawStar = !(floor(mod(st.y*scale,4.0)) == 1. && floor(mod(st.x*scale,6.5)) == 1.);
+    }
+    // Traslación
+    if (floor(mod(st.y*scale,2.0)) == 1. )
+      st.x += 0.5;
+    
+    
+    // 
+    st = fract(st*scale);
+	float variance = abs(sin(u_time*2.));
+    if (star(st,variance) && drawStar && inGalaxy) {
+        color = vec3(1.);
+    }
+
+  	gl_FragColor = vec4(color,1.0);
+}

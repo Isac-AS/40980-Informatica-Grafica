@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+  <!-- STEP 1: Prepare the canvas -->
+  <head>
+    <style>
+      #my_Canvas {
+        border: 5px dotted blue;
+      }
+      #scoreBoard {
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas width="600" height="600" id="my_Canvas"></canvas>
+    <div id="scoreBoard">
+      <h1><span id="p1_score"></span> - <span id="p2_score"></span></h1>
+    </div>
+    <br />
+    <p>
+      El jugador 1 es el de la izquierda, el jugador 2 es el de la derecha.
+      <br />
+      Controles P1: w:arriba, s:abajo
+      <br />
+      Controles P2: FlechaArriba:arriba, FlechaAbajo:abajo
+      <br />
+      Autor: Isac Añor Santana
+    </p>
+
+    <!-- vertex Shader -->
+    <script id="vertex-shader" type="x-shader/x-vertex">
+      #version 300 es
+      precision mediump float;
+
+      in vec2 aCoordinates;
+
+      void main(void) {
+        gl_Position = vec4(aCoordinates, 0, 1);
+        gl_PointSize = 10.0;
+      }
+    </script>
+
+    <!-- fragment Shader -->
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        #version 300 es
+        precision mediump float;
+
+        uniform vec4 uColor;
+        out vec4 fragColor;
+
+        void main(void) {
+          fragColor = uColor;
+      }
+    </script>
+
+    <script>
+      var canvas;
+      var colorLocation;
+      var vertex_buffer;
+
+      var p1_score = 0;
+      document.getElementById("p1_score").innerHTML = p1_score;
+      var p2_score = 0;
+      document.getElementById("p2_score").innerHTML = p2_score;
+
+      var ball = {
+        x: -0.5,
+        y: 0.3,
+        w: 0.1,
+        h: 0.1,
+        color: [0, 0, 0, 1],
+        speedX: 0.005,
+        speedY: 0.005,
+      };
+
+      var player1 = {
+        x: -0.8,
+        y: -0.3,
+        w: 0.1,
+        h: 0.5,
+        color: [1, 1, 1, 1],
+        move: 0,
+      };
+
+      var player2 = {
+        x: 0.8,
+        y: -0.3,
+        w: 0.1,
+        h: 0.5,
+        color: [1, 1, 1, 1],
+        move: 0,
+      };
+
+      /*
+     //contexto 2D tradicional
+     var canvas = document.getElementById('my_Canvas');
+     var context = canvas.getContext('2d');
+     context.font = '20pt Calibri';
+     context.fillStyle = 'red'
+     context.fillText('Hola',70,70);*/
+
+      function drawRectangle(r) {
+        x = r.x;
+        y = r.y;
+        w = r.w;
+        h = r.h;
+
+        v = new Float32Array([
+          x,
+          y + h,
+          x,
+          y,
+          x + w,
+          y + h,
+          x,
+          y,
+          x + w,
+          y + h,
+          x + w,
+          y,
+        ]);
+        // Pass the vertex data to the buffer
+        gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+
+        // Set color
+        gl.uniform4fv(colorLocation, r.color);
+
+        // Draw
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+
+      function init() {
+        // ============ STEP 1: Creating a canvas=================
+        canvas = document.getElementById("my_Canvas");
+        gl = canvas.getContext("webgl2");
+
+        //======= STEP 2: Defining and storing the geometry=======
+
+        var vertices = [
+          -0.5, 0.5, 0.0, 0.5, -0.25, 0.25, 0.0, 0.0, 0.9, 0.9, 0.9, -0.9,
+        ];
+
+        // Create an empty buffer object to store the vertex buffer
+        vertex_buffer = gl.createBuffer();
+
+        // Bind appropriate array buffer to it
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Pass the vertex data to the buffer
+        /*gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW
+        );*/
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        //========== STEP 3: Create and compile shaders ==========
+
+        // Create a vertex shader object
+        var vertShader = gl.createShader(gl.VERTEX_SHADER);
+
+        // Attach vertex shader source code
+        var script = document.getElementById("vertex-shader");
+        var shaderString = script.text.trim();
+        gl.shaderSource(vertShader, shaderString);
+
+        // Compile the vertex shader
+        gl.compileShader(vertShader);
+
+        // Create fragment shader object
+        var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+
+        // Attach fragment shader source code
+        script = document.getElementById("fragment-shader");
+        shaderString = script.text.trim();
+        gl.shaderSource(fragShader, shaderString);
+
+        // Compile the fragmentt shader
+        gl.compileShader(fragShader);
+
+        // Create a shader program object to store
+        // the combined shader program
+        var shaderProgram = gl.createProgram();
+
+        // Attach a vertex shader
+        gl.attachShader(shaderProgram, vertShader);
+
+        // Attach a fragment shader
+        gl.attachShader(shaderProgram, fragShader);
+
+        // Link both programs
+        gl.linkProgram(shaderProgram);
+
+        // Use the combined shader program object
+        gl.useProgram(shaderProgram);
+
+        //======== STEP 4: Associating shaders to buffer objects ========
+
+        // Bind vertex buffer object
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Get the attribute location
+        var coordLocation = gl.getAttribLocation(shaderProgram, "aCoordinates");
+
+        // Obtain color location
+        colorLocation = gl.getUniformLocation(shaderProgram, "uColor");
+
+        // Point an attribute to the currently bound VBO
+        gl.vertexAttribPointer(coordLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Enable the attribute
+        gl.enableVertexAttribArray(coordLocation);
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        time = 0;
+        render(time);
+
+        document.onkeydown = onKeyDown;
+        document.onkeyup = onKeyUp;
+      }
+
+      function onKeyDown(key) {
+        switch (key.keyCode) {
+          case 87:
+            player1.move = 0.02;
+            break;
+          case 83:
+            player1.move = -0.02;
+            break;
+          case 38:
+            player2.move = 0.02;
+            break;
+          case 40:
+            player2.move = -0.02;
+            break;
+          default:
+            console.log(key.keyCode);
+        }
+      }
+
+      function onKeyUp(key) {
+        player1.move = 0;
+        player2.move = 0;
+      }
+
+      function collision(player) {
+        if (
+          player.x < ball.x + ball.w &&
+          player.x + player.w > ball.x &&
+          player.y < ball.y + ball.h &&
+          player.h + player.y > ball.y
+        ) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+
+      function handleBounce() {
+        // Vertical bounce
+        if (ball.y + ball.h >= 1 || ball.y <= -1) ball.speedY *= -1;
+
+        // Player bounces
+        if (collision(player1)) {
+          ball.speedX *= -1.1;
+          ball.x = player1.x + player1.w + 0.01;
+          ball.color = [0, 1, 0, 1];
+        } else if (collision(player2)) {
+          ball.speedX *= -1.2;
+          ball.x = player2.x - ball.w - 0.01;
+          ball.color = [0, 1, 0, 1];
+        } else ball.color = [0, 0, 0, 1];
+      }
+
+      function canMove(player) {
+        if (player.y + player.h >= 1 && player.move < 0) return true;
+        else if (player.y <= -1 && player.move > 0) return true;
+        else if (player.y + player.h < 1 && player.y > -1) return true;
+        else return false;
+      }
+
+      function render(time) {
+        //console.log("tiempo = ", time);
+        //========= STEP 5: Drawing the primitive ===============
+        // Clear the canvas
+        gl.clearColor(0.5, 0.5, 0.5, 1.0);
+
+        // Clear the color buffer bit
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Set the view port
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+
+        // Draw the the ball
+        drawRectangle(ball);
+
+        // Animate the ball
+        ball.x += ball.speedX;
+        ball.y += ball.speedY;
+
+        handleBounce();
+
+        // Goal scoring
+        if (ball.x <= player1.x - ball.w) {
+          p2_score += 1;
+          ball.x = 0;
+          ball.y = 0;
+          ball.speedX = 0.005;
+          ball.speedY = 0.005;
+          document.getElementById("p2_score").innerHTML = p2_score;
+        }
+        if (ball.x >= player2.x + ball.w) {
+          p1_score += 1;
+          ball.x = 0;
+          ball.y = 0;
+          ball.speedX = 0.005;
+          ball.speedY = 0.005;
+          document.getElementById("p1_score").innerHTML = p1_score;
+        }
+
+        if (canMove(player1)) player1.y += player1.move;
+        drawRectangle(player1);
+
+        if (canMove(player2)) player2.y += player2.move;
+        drawRectangle(player2);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        window.requestAnimationFrame(render);
+      }
+
+      window.onload = init;
+    </script>
+  </body>
+</html>
