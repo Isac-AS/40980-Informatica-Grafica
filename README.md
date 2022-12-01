@@ -6,6 +6,11 @@ WebGL and THREEjs are the tools used in the different assignments.
 The code will be uploaded in it's respective directory. However, they are also in glitch. To simplify access to the execution of the assignments, links to the 
 live sites as well as a small description will account for the rest of this document.
 
+## Week 12 - Target range
+Small target range using Ammo.js. ¿Can you hit the target? ¿Can you hit an object while it's still falling?
+
+Live site: https://ig-semana12-isac.glitch.me/
+
 ## Week 11 - Pseudo game of life
 3D game of life inspired scene in which cube "reproduction" and "death" are represented using TWEENjs animations.
 
