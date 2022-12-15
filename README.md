@@ -6,6 +6,11 @@ WebGL and THREEjs are the tools used in the different assignments.
 The code will be uploaded in it's respective directory. However, they are also in glitch. To simplify access to the execution of the assignments, links to the 
 live sites as well as a small description will account for the rest of this document.
 
+## Week 14 - VR Maze
+Not much description is needed. Just get out of the maze!
+
+Live site: https://ig-vr-isac-0.glitch.me
+
 ## Week 12 - Shooting range
 Small target range using Ammo.js. ¿Can you hit the target? ¿Can you hit an object while it's still falling?
 
